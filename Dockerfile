@@ -5,7 +5,7 @@ ENV PIP_RETRIES=120 \
     PIP_DEFAULT_TIMEOUT=400 \
     C_FORCE_ROOT=1
 
-RUN apt-get-install.sh wget tar build-essential
+RUN apt-get-install.sh wget tar build-essential git
 
 WORKDIR /rapidpro
 
@@ -33,6 +33,12 @@ RUN /venv/bin/pip install --upgrade pip && poetry install --no-interaction --no-
         "whitenoise==5.3.0" \
         "flower==1.0.0"
 
+# install Ona oidc pip package from Github if ENABLE_OIDC is on
+# ARG ENABLE_OIDC
+# ENV ENABLE_OIDC=${ENABLE_OIDC:-off}
+ARG OIDC_VERSION
+ENV OIDC_VERSION=${OIDC_VERSION:-master}
+RUN /venv/bin/pip install -e "git+https://github.com/onaio/ona-oidc.git@${OIDC_VERSION}#egg=ona-oidc"
 FROM ghcr.io/praekeltfoundation/python-base-nw:3.9-bullseye
 
 ARG RAPIDPRO_VERSION

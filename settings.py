@@ -171,7 +171,10 @@ BRANDING = {
         'support_widget': env('BRANDING_SUPPORT_WIDGET', 'off') == 'on',
     }
 }
-DEFAULT_BRAND = 'rapidpro.io'
+
+BRANDING[HOSTNAME]= BRANDING['rapidpro.io'].copy()
+BRANDING[HOSTNAME]['keys'] = [HOSTNAME]
+DEFAULT_BRAND = env('DEFAULT_BRAND', HOSTNAME)
 
 # build up our offline compression context based on available brands
 COMPRESS_OFFLINE_CONTEXT = []
@@ -200,3 +203,19 @@ iso_3_languages = env('NON_ISO6391_LANGUAGES', '')
 NON_ISO6391_LANGUAGES = {}
 if iso_3_languages:
     NON_ISO6391_LANGUAGES = set(iso_3_languages.split(','))
+
+ENABLE_OIDC = env('ENABLE_OIDC', 'off')
+if ENABLE_OIDC == 'on':
+    INSTALLED_APPS = INSTALLED_APPS + (
+        'storages',
+        'oidc',
+    )
+
+    APP_URLS += [
+        "oidc.urls",
+    ]
+    OPENID_CONNECT_VIEWSET_CONFIG = env('OPENID_CONNECT_VIEWSET_CONFIG', '{}')
+    OPENID_CONNECT_AUTH_SERVERS = env('OPENID_CONNECT_AUTH_SERVERS', '{}')
+    OPENID_CONNECT_DEFAULT_AUTH_SERVER = env('OPENID_CONNECT_DEFAULT_AUTH_SERVER', 'default')
+    LOGIN_URL = "/oidc/" + OPENID_CONNECT_DEFAULT_AUTH_SERVER + "/login/"
+    LOGOUT_URL = "/oidc/" + OPENID_CONNECT_DEFAULT_AUTH_SERVER + "/logout/"

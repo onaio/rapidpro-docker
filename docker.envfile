@@ -13,3 +13,6 @@ MANAGEPY_MIGRATE=on
 MANAGEPY_IMPORT_GEOJSON=on
 # Use Uganda Relation ID can be used as a test
 OSM_RELATION_IDS=192796
+# enable oidc auth
+ENABLE_OIDC=on
+OIDC_VERSION=v1.0.1
