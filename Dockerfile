@@ -1,4 +1,4 @@
-FROM ghcr.io/praekeltfoundation/python-base-nw:3.9-bullseye as builder
+FROM ghcr.io/praekeltfoundation/python-base-nw:3.9.16-bullseye as builder
 
 ENV PIP_RETRIES=120 \
     PIP_TIMEOUT=400 \
@@ -26,12 +26,15 @@ ENV PATH="/venv/bin:$PATH"
 ENV VIRTUAL_ENV="/venv"
 
 # Install configuration related dependencies
-RUN /venv/bin/pip install --upgrade pip && poetry install --no-interaction --no-dev && poetry add \
+RUN /venv/bin/pip install --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --trusted-host pypi.org --upgrade pip
+RUN poetry install --no-interaction --no-ansi --only main
+RUN poetry add \
         "django-getenv==1.3.2" \
         "django-cache-url==3.2.3" \
         "uwsgi==2.0.20" \
         "whitenoise==5.3.0" \
-        "flower==1.0.0"
+        "flower==1.0.0" \
+        "codecov==2.1.13"
 
 # install Ona oidc pip package from Github if ENABLE_OIDC is on
 # ARG ENABLE_OIDC
@@ -39,7 +42,7 @@ RUN /venv/bin/pip install --upgrade pip && poetry install --no-interaction --no-
 ARG OIDC_VERSION
 ENV OIDC_VERSION=${OIDC_VERSION:-master}
 RUN /venv/bin/pip install -e "git+https://github.com/onaio/ona-oidc.git@${OIDC_VERSION}#egg=ona-oidc"
-FROM ghcr.io/praekeltfoundation/python-base-nw:3.9-bullseye
+FROM ghcr.io/praekeltfoundation/python-base-nw:3.9.16-bullseye
 
 ARG RAPIDPRO_VERSION
 ENV RAPIDPRO_VERSION=${RAPIDPRO_VERSION:-master}
