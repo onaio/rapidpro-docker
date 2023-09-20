@@ -31,9 +31,9 @@ RUN poetry install --no-interaction --no-ansi --only main
 RUN poetry add \
         "django-getenv==1.3.2" \
         "django-cache-url==3.2.3" \
-        "uwsgi==2.0.20" \
+        "uwsgi==2.0.22" \
         "whitenoise==5.3.0" \
-        "flower==1.0.0"
+        "flower==1.2.0"
 
 # install Ona oidc pip package from Github if ENABLE_OIDC is on
 # ARG ENABLE_OIDC
