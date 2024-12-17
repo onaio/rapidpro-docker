@@ -1,11 +1,11 @@
-FROM ghcr.io/praekeltfoundation/python-base-nw:3.9.16-bullseye as builder
+FROM python:3.9.21-slim-bookworm as builder
 
 ENV PIP_RETRIES=120 \
     PIP_TIMEOUT=400 \
     PIP_DEFAULT_TIMEOUT=400 \
     C_FORCE_ROOT=1
 
-RUN apt-get-install.sh wget tar build-essential git
+RUN apt update && apt install -y wget tar build-essential git
 
 WORKDIR /rapidpro
 
@@ -26,14 +26,15 @@ ENV PATH="/venv/bin:$PATH"
 ENV VIRTUAL_ENV="/venv"
 
 # Install configuration related dependencies
-RUN /venv/bin/pip install --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --trusted-host pypi.org --upgrade pip
+RUN /venv/bin/pip install --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --trusted-host pypi.org --upgrade pip && \
+/venv/bin/pip install --no-cache-dir \
+"django-getenv==1.3.2" \
+"django-cache-url==3.2.3" \
+"uwsgi==2.0.22" \
+"whitenoise==5.3.0" \
+"flower==1.2.0"
+
 RUN poetry install --no-interaction --no-ansi --only main
-RUN poetry add \
-        "django-getenv==1.3.2" \
-        "django-cache-url==3.2.3" \
-        "uwsgi==2.0.22" \
-        "whitenoise==5.3.0" \
-        "flower==1.2.0"
 
 # install Ona oidc pip package from Github if ENABLE_OIDC is on
 # ARG ENABLE_OIDC
@@ -41,7 +42,7 @@ RUN poetry add \
 ARG OIDC_VERSION
 ENV OIDC_VERSION=${OIDC_VERSION:-master}
 RUN /venv/bin/pip install -e "git+https://github.com/onaio/ona-oidc.git@${OIDC_VERSION}#egg=ona-oidc"
-FROM ghcr.io/praekeltfoundation/python-base-nw:3.9.16-bullseye
+FROM  python:3.9.21-slim-bookworm
 
 ARG RAPIDPRO_VERSION
 ENV RAPIDPRO_VERSION=${RAPIDPRO_VERSION:-master}
@@ -57,14 +58,17 @@ ENV VIRTUAL_ENV="/venv"
 # `pcre` is needed for uwsgi
 # `geos`, `gdal`, and `proj` are needed for `manage.py download_geojson` and `manage.py import_geojson`
 # `npm` for static file generation
-RUN apt-get-install.sh \
+RUN apt-get update -q && \
+    apt-get install -y --no-install-recommends \
         postgresql-client \
         libmagic-dev \
         libpcre3 \
-        libgeos-c1v5 \
-        libgdal28 \
-        libproj19 \
-        npm
+        libgeos-dev \
+        libgdal-dev \
+        libproj-dev \
+        npm && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /rapidpro
 
