@@ -5,9 +5,9 @@ MANAGEPY_COLLECTSTATIC=on
 MANAGEPY_COMPRESS=on
 MANAGEPY_INIT_DB=on
 MANAGEPY_MIGRATE=on
-# Since we're not setting up OAuth tokens builds are subject
-# to IP based rate limiting on GitHub for TravisCI IPs which
-# can result in unpredictable builds.
+# GeoJSON import calls the GitHub API; without an auth token, builds
+# are subject to GitHub's per-IP rate limit and can fail unpredictably
+# when shared CI runners hit the limit.
 #
 # Set this to `on` if you really want to test this.
 MANAGEPY_IMPORT_GEOJSON=on
