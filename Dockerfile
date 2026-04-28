@@ -1,4 +1,4 @@
-FROM python:3.9.21-slim-bookworm as builder
+FROM python:3.10.16-slim-bookworm as builder
 
 ENV PIP_RETRIES=120 \
     PIP_TIMEOUT=400 \
@@ -18,7 +18,7 @@ RUN echo "Downloading RapidPro ${RAPIDPRO_VERSION} from https://github.com/$RAPI
     tar -xf rapidpro.tar.gz --strip-components=1 && \
     rm rapidpro.tar.gz
 
-RUN pip install -U pip && pip install -U poetry
+RUN pip install -U pip && pip install -U poetry packaging
 
 # Build Python virtualenv
 RUN python3 -m venv /venv
@@ -32,20 +32,22 @@ RUN /venv/bin/pip install --trusted-host pypi.python.org --trusted-host files.py
 "django-cache-url==3.2.3" \
 "uwsgi==2.0.22" \
 "whitenoise==5.3.0" \
-"flower==1.2.0"
+"flower==1.2.0" \
+"sentry-sdk==2.5.1"
 
 RUN poetry install --no-interaction --no-ansi --only main
 
-# install Ona oidc pip package from Github if ENABLE_OIDC is on
-# ARG ENABLE_OIDC
-# ENV ENABLE_OIDC=${ENABLE_OIDC:-off}
-ARG OIDC_VERSION
-ENV OIDC_VERSION=${OIDC_VERSION:-master}
+# Install the Ona OIDC pip package.
+ARG OIDC_VERSION=v1.1.1
+ENV OIDC_VERSION=${OIDC_VERSION:-v1.1.1}
 RUN /venv/bin/pip install -e "git+https://github.com/onaio/ona-oidc.git@${OIDC_VERSION}#egg=ona-oidc"
-FROM  python:3.9.21-slim-bookworm
+
+FROM python:3.10.16-slim-bookworm
 
 ARG RAPIDPRO_VERSION
+ARG RAPIDPRO_REPO
 ENV RAPIDPRO_VERSION=${RAPIDPRO_VERSION:-master}
+ENV RAPIDPRO_REPO=${RAPIDPRO_REPO:-rapidpro/rapidpro}
 
 # Copy rapidpro and venv from builder
 COPY --from=builder /rapidpro /rapidpro
@@ -87,6 +89,17 @@ COPY stack/clear-compressor-cache.py /rapidpro/
 
 EXPOSE 8000
 COPY stack/startup.sh /
+
+# Drop privileges — run as a non-root user (uid 1000) with a real $HOME and
+# no login shell. uid 1000 is what Kubernetes' restricted Pod Security
+# Standard expects (runAsUser >= 1000) so the container's UID does not
+# overlap with privileged host system accounts.
+RUN groupadd -g 1000 rapidpro && \
+    useradd -m -u 1000 -g rapidpro -s /sbin/nologin rapidpro && \
+    chmod +x /startup.sh && \
+    chown rapidpro:rapidpro /startup.sh && \
+    chown -R rapidpro:rapidpro /rapidpro /venv
+USER rapidpro
 
 LABEL org.label-schema.name="RapidPro" \
       org.label-schema.description="RapidPro allows organizations to visually build scalable interactive messaging applications." \

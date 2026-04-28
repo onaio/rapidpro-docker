@@ -14,10 +14,11 @@ jobs:
       IMAGE: praekeltfoundation/rapidpro
       REGISTRY_USER: rapidproautomation
       REPO: rapidpro/rapidpro
+      OIDC_VERSION: v1.1.1
       GREP_TIMEOUT: 360
     strategy:
       matrix:
-        VERSION: [v7.2.4, v7.4.2]
+        VERSION: [v8.0.1]
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-python@v2
@@ -43,6 +44,7 @@ jobs:
           build-args: |
             RAPIDPRO_VERSION=${{matrix.VERSION}}
             RAPIDPRO_REPO=${{env.REPO}}
+            OIDC_VERSION=${{env.OIDC_VERSION}}
       - name: Test Rapidpro Image
         run: |
           docker run --name rapidpro --env-file docker.envfile --link postgis --publish 8000:8000 --detach "${{ env.IMAGE }}"
@@ -90,3 +92,4 @@ jobs:
           build-args: |
             RAPIDPRO_VERSION=${{matrix.VERSION}}
             RAPIDPRO_REPO=${{env.REPO}}
+            OIDC_VERSION=${{env.OIDC_VERSION}}

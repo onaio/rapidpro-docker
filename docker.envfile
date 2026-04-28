@@ -15,4 +15,8 @@ MANAGEPY_IMPORT_GEOJSON=on
 OSM_RELATION_IDS=192796
 # enable oidc auth
 ENABLE_OIDC=on
-OIDC_VERSION=v1.0.1
+OIDC_VERSION=v1.1.1
+# OIDC viewset and auth-server configs; populate per deployment when
+# ENABLE_OIDC=on. Empty dicts are appropriate for the CI smoke test.
+OPENID_CONNECT_VIEWSET_CONFIG={}
+OPENID_CONNECT_AUTH_SERVERS={}
