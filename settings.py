@@ -8,6 +8,12 @@ from __future__ import unicode_literals
 from getenv import env
 import dj_database_url
 import django_cache_url
+import sentry_sdk
+from sentry_sdk.integrations.celery import CeleryIntegration
+from sentry_sdk.integrations.django import DjangoIntegration
+from sentry_sdk.integrations.logging import LoggingIntegration, ignore_logger
+from django.core.signals import got_request_exception
+from sentry_sdk import capture_exception
 from datetime import datetime
 from django.utils.translation import gettext_lazy as _
 
@@ -17,9 +23,28 @@ ROOT_URLCONF = env('ROOT_URLCONF', 'temba.urls')
 
 DEBUG = env('DJANGO_DEBUG', 'off') == 'on'
 
-GEOS_LIBRARY_PATH = '/usr/lib/x86_64-linux-gnu/libgeos_c.so.1'
-GDAL_LIBRARY_PATH = '/usr/lib/libgdal.so.28'
-PROJ_LIBRARY_PATH = '/usr/lib/x86_64-linux-gnu/libproj.so.19'
+SENTRY_DSN = os.environ.get("SENTRY_DSN", "")
+
+
+if SENTRY_DSN:  # pragma: no cover
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        integrations=[DjangoIntegration(), CeleryIntegration(), LoggingIntegration()],
+        send_default_pii=True,
+        traces_sample_rate=0,
+    )
+    ignore_logger("django.security.DisallowedHost")
+
+    def send_exception_to_sentry(sender, request, **kwargs):
+        exception = kwargs.get('exception')
+        if exception:
+            capture_exception(exception)
+
+    got_request_exception.connect(send_exception_to_sentry)
+# Django GIS auto-discovers libgeos_c, libgdal, and libproj via ldconfig
+# (ctypes.util.find_library), so no GEOS_LIBRARY_PATH / GDAL_LIBRARY_PATH /
+# PROJ_LIBRARY_PATH overrides are needed when the Debian -dev packages are
+# installed.
 
 SECRET_KEY = env('SECRET_KEY', required=True)
 
@@ -139,7 +164,7 @@ SECURE_PROXY_SSL_HEADER = (
 IS_PROD = env('IS_PROD', 'off') == 'on'
 
 BRANDING = {
-    'rapidpro.io': {
+    'rapidpro': {
         'slug': env('BRANDING_SLUG', 'rapidpro'),
         'name': env('BRANDING_NAME', 'RapidPro'),
         'org': env('BRANDING_ORG', 'RapidPro'),
@@ -171,7 +196,29 @@ BRANDING = {
         'support_widget': env('BRANDING_SUPPORT_WIDGET', 'off') == 'on',
     }
 }
-DEFAULT_BRAND = 'rapidpro.io'
+# Extract and transform the first branding entry to the new BRANDS format
+BRANDS = [
+    {
+        "slug": env('BRANDING_SLUG',"rapidpro"),
+        "name": env('BRANDING_NAME', 'RapidPro'),
+        "hosts": [HOSTNAME],
+        "org": env('BRANDING_ORG', 'RapidPro'),
+        "domain": HOSTNAME,
+        "colors": dict([rule.split('=') for rule in env('BRANDING_COLORS', 'primary=#0c6596').split(';')]),
+        "styles": ["brands/rapidpro/font/style.css"],
+        "email": env('BRANDING_EMAIL', 'join@rapidpro.io'),
+        "support_email": env('BRANDING_SUPPORT_EMAIL', 'join@rapidpro.io'),
+        "link": env('BRANDING_LINK', 'https://app.rapidpro.io'),
+        "docs_link": env('BRANDING_DOCS_LINK', 'http://docs.rapidpro.io'),
+        "ticket_domain": env('BRANDING_TICKET_DOMAIN', HOSTNAME),
+        "favico": env('BRANDING_FAVICO', 'brands/rapidpro/rapidpro.ico'),
+        "splash": env('BRANDING_SPLASH', '/brands/rapidpro/splash.jpg'),
+        "logo": env('BRANDING_LOGO', '/brands/rapidpro/logo.png'),
+        "allow_signups": env('BRANDING_ALLOW_SIGNUPS', 'on') == 'on',
+        "title": _("Visually build nationally scalable mobile applications"),
+    }
+]
+
 
 # build up our offline compression context based on available brands
 COMPRESS_OFFLINE_CONTEXT = []
@@ -200,3 +247,29 @@ iso_3_languages = env('NON_ISO6391_LANGUAGES', '')
 NON_ISO6391_LANGUAGES = {}
 if iso_3_languages:
     NON_ISO6391_LANGUAGES = set(iso_3_languages.split(','))
+
+ENABLE_OIDC = env('ENABLE_OIDC', 'off')
+if ENABLE_OIDC == 'on':
+    INSTALLED_APPS = INSTALLED_APPS + (
+        'storages',
+        'oidc',
+    )
+
+    APP_URLS += [
+        "oidc.urls",
+    ]
+    # ona-oidc expects these settings to be dicts. django-getenv's env()
+    # auto-parses dict-shaped env-var values via ast.literal_eval, so
+    # deployment values can use Python literals (True/False/None,
+    # trailing commas) in addition to strict JSON.
+    OPENID_CONNECT_VIEWSET_CONFIG = env('OPENID_CONNECT_VIEWSET_CONFIG', {})
+    OPENID_CONNECT_AUTH_SERVERS = env('OPENID_CONNECT_AUTH_SERVERS', {})
+    OPENID_CONNECT_DEFAULT_AUTH_SERVER = env('OPENID_CONNECT_DEFAULT_AUTH_SERVER', 'default')
+    LOGIN_URL = "/oidc/" + OPENID_CONNECT_DEFAULT_AUTH_SERVER + "/login/"
+    LOGOUT_URL = "/oidc/" + OPENID_CONNECT_DEFAULT_AUTH_SERVER + "/logout/"
+
+# CSRF trusted origins — comma-separated list provided by the deployment.
+# Example: CSRF_TRUSTED_ORIGINS="https://app.example.org/*,https://api.example.org/*"
+_csrf_origins = env('CSRF_TRUSTED_ORIGINS', '')
+if _csrf_origins:
+    CSRF_TRUSTED_ORIGINS = [o.strip() for o in _csrf_origins.split(',') if o.strip()]

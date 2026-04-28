@@ -5,11 +5,18 @@ MANAGEPY_COLLECTSTATIC=on
 MANAGEPY_COMPRESS=on
 MANAGEPY_INIT_DB=on
 MANAGEPY_MIGRATE=on
-# Since we're not setting up OAuth tokens builds are subject
-# to IP based rate limiting on GitHub for TravisCI IPs which
-# can result in unpredictable builds.
+# GeoJSON import calls the GitHub API; without an auth token, builds
+# are subject to GitHub's per-IP rate limit and can fail unpredictably
+# when shared CI runners hit the limit.
 #
 # Set this to `on` if you really want to test this.
 MANAGEPY_IMPORT_GEOJSON=on
 # Use Uganda Relation ID can be used as a test
 OSM_RELATION_IDS=192796
+# enable oidc auth
+ENABLE_OIDC=on
+OIDC_VERSION=v1.1.1
+# OIDC viewset and auth-server configs; populate per deployment when
+# ENABLE_OIDC=on. Empty dicts are appropriate for the CI smoke test.
+OPENID_CONNECT_VIEWSET_CONFIG={}
+OPENID_CONNECT_AUTH_SERVERS={}

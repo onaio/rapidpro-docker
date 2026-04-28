@@ -1,11 +1,11 @@
-FROM ghcr.io/praekeltfoundation/python-base-nw:3.9-bullseye as builder
+FROM python:3.10.16-slim-bookworm as builder
 
 ENV PIP_RETRIES=120 \
     PIP_TIMEOUT=400 \
     PIP_DEFAULT_TIMEOUT=400 \
     C_FORCE_ROOT=1
 
-RUN apt-get-install.sh wget tar build-essential
+RUN apt update && apt install -y wget tar build-essential git
 
 WORKDIR /rapidpro
 
@@ -18,7 +18,7 @@ RUN echo "Downloading RapidPro ${RAPIDPRO_VERSION} from https://github.com/$RAPI
     tar -xf rapidpro.tar.gz --strip-components=1 && \
     rm rapidpro.tar.gz
 
-RUN pip install -U pip && pip install -U poetry
+RUN pip install -U pip && pip install -U poetry packaging
 
 # Build Python virtualenv
 RUN python3 -m venv /venv
@@ -26,17 +26,28 @@ ENV PATH="/venv/bin:$PATH"
 ENV VIRTUAL_ENV="/venv"
 
 # Install configuration related dependencies
-RUN /venv/bin/pip install --upgrade pip && poetry install --no-interaction --no-dev && poetry add \
-        "django-getenv==1.3.2" \
-        "django-cache-url==3.2.3" \
-        "uwsgi==2.0.20" \
-        "whitenoise==5.3.0" \
-        "flower==1.0.0"
+RUN /venv/bin/pip install --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --trusted-host pypi.org --upgrade pip && \
+/venv/bin/pip install --no-cache-dir \
+"django-getenv==1.3.2" \
+"django-cache-url==3.2.3" \
+"uwsgi==2.0.22" \
+"whitenoise==5.3.0" \
+"flower==1.2.0" \
+"sentry-sdk==2.5.1"
 
-FROM ghcr.io/praekeltfoundation/python-base-nw:3.9-bullseye
+RUN poetry install --no-interaction --no-ansi --only main
+
+# Install the Ona OIDC pip package.
+ARG OIDC_VERSION=v1.1.1
+ENV OIDC_VERSION=${OIDC_VERSION:-v1.1.1}
+RUN /venv/bin/pip install -e "git+https://github.com/onaio/ona-oidc.git@${OIDC_VERSION}#egg=ona-oidc"
+
+FROM python:3.10.16-slim-bookworm
 
 ARG RAPIDPRO_VERSION
+ARG RAPIDPRO_REPO
 ENV RAPIDPRO_VERSION=${RAPIDPRO_VERSION:-master}
+ENV RAPIDPRO_REPO=${RAPIDPRO_REPO:-rapidpro/rapidpro}
 
 # Copy rapidpro and venv from builder
 COPY --from=builder /rapidpro /rapidpro
@@ -49,14 +60,17 @@ ENV VIRTUAL_ENV="/venv"
 # `pcre` is needed for uwsgi
 # `geos`, `gdal`, and `proj` are needed for `manage.py download_geojson` and `manage.py import_geojson`
 # `npm` for static file generation
-RUN apt-get-install.sh \
+RUN apt-get update -q && \
+    apt-get install -y --no-install-recommends \
         postgresql-client \
         libmagic-dev \
         libpcre3 \
-        libgeos-c1v5 \
-        libgdal28 \
-        libproj19 \
-        npm
+        libgeos-dev \
+        libgdal-dev \
+        libproj-dev \
+        npm && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /rapidpro
 
@@ -75,6 +89,17 @@ COPY stack/clear-compressor-cache.py /rapidpro/
 
 EXPOSE 8000
 COPY stack/startup.sh /
+
+# Drop privileges — run as a non-root user (uid 1000) with a real $HOME and
+# no login shell. uid 1000 is what Kubernetes' restricted Pod Security
+# Standard expects (runAsUser >= 1000) so the container's UID does not
+# overlap with privileged host system accounts.
+RUN groupadd -g 1000 rapidpro && \
+    useradd -m -u 1000 -g rapidpro -s /sbin/nologin rapidpro && \
+    chmod +x /startup.sh && \
+    chown rapidpro:rapidpro /startup.sh && \
+    chown -R rapidpro:rapidpro /rapidpro /venv
+USER rapidpro
 
 LABEL org.label-schema.name="RapidPro" \
       org.label-schema.description="RapidPro allows organizations to visually build scalable interactive messaging applications." \
