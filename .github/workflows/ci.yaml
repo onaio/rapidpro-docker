@@ -11,13 +11,13 @@ jobs:
     runs-on: ubuntu-latest
     env:
       python_version: "3.9.x"
-      IMAGE: praekeltfoundation/rapidpro
-      REGISTRY_USER: rapidproautomation
+      IMAGE: rapidpro:ci
       REPO: rapidpro/rapidpro
+      OIDC_VERSION: v1.1.1
       GREP_TIMEOUT: 360
     strategy:
       matrix:
-        VERSION: [v7.2.4, v7.4.2]
+        VERSION: [v8.0.1]
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-python@v2
@@ -43,6 +43,7 @@ jobs:
           build-args: |
             RAPIDPRO_VERSION=${{matrix.VERSION}}
             RAPIDPRO_REPO=${{env.REPO}}
+            OIDC_VERSION=${{env.OIDC_VERSION}}
       - name: Test Rapidpro Image
         run: |
           docker run --name rapidpro --env-file docker.envfile --link postgis --publish 8000:8000 --detach "${{ env.IMAGE }}"
@@ -59,34 +60,3 @@ jobs:
         if: always()
         run: |
           docker logs rapidpro
-      - name: construct image metadata
-        uses: docker/metadata-action@v3
-        id: meta
-        with:
-          images: |
-            praekeltfoundation/rapidpro
-            ghcr.io/praekeltfoundation/rapidpro-docker
-          tags: |
-            type=pep440,pattern=v{{major}},value=${{matrix.VERSION}}
-            type=pep440,pattern=v{{major}}.{{minor}},value=${{matrix.VERSION}}
-            type=pep440,pattern=v{{version}},value=${{matrix.VERSION}}
-      - name: login to ghcr
-        uses: docker/login-action@v1
-        with:
-          registry: ghcr.io
-          username: ${{github.actor}}
-          password: ${{secrets.GITHUB_TOKEN}}
-      - name: login to docker hub
-        uses: docker/login-action@v1
-        with:
-          username: ${{secrets.DOCKER_USERNAME}}
-          password: ${{secrets.DOCKER_PASSWORD}}
-      - name: build and push
-        uses: docker/build-push-action@v2
-        with:
-          push: ${{github.event_name != 'pull_request'}}
-          tags: ${{steps.meta.outputs.tags}}
-          context: .
-          build-args: |
-            RAPIDPRO_VERSION=${{matrix.VERSION}}
-            RAPIDPRO_REPO=${{env.REPO}}

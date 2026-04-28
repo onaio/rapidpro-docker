@@ -1,20 +1,10 @@
 RapidPro Docker
 ===============
 
-[![Build Status](https://travis-ci.org/praekeltfoundation/rapidpro-docker.svg?branch=master)](https://travis-ci.org/praekeltfoundation/rapidpro-docker)
-[![Docker Version](https://images.microbadger.com/badges/version/praekeltfoundation/rapidpro.svg)](https://hub.docker.com/r/praekeltfoundation/rapidpro/tags/ "Get the latest version from Docker Hub")
-
-This repository's sole purpose is to build docker images versioned off of
-git tags published in rapidpro/rapidpro and upload them to Docker Hub.
-
-The idea is:
-
-  1. Set up Travis Cron job to run every 24 hours
-  3. The Travis build script should download the latest rapidpro/rapidpro
-     tagged release matching `^v[0-9\.]$`
-  4. Build the docker image and tag with the latest git tag.
-  5. Push the docker image to Docker hub using credentials stored in
-     Travis' secrets vault.
+This repository builds docker images of RapidPro versioned off git tags
+published in rapidpro/rapidpro and uploads them to Docker Hub via
+GitHub Actions (see `.github/workflows/ci.yaml`). The set of versions
+built is the `VERSION` matrix in that workflow.
 
 Running RapidPro in Docker
 --------------------------
@@ -267,3 +257,57 @@ v6.0 to v6.2:
 v6.4 to v7.0:
   - Clear the sitestatic folder/S3 bucket and regenerate static files (otherwise icons don't work)
   - Ensure you're calling celery in the new CLI format, ie. `celery --app=temba beat`, not `celery beat --app=temba`
+
+RapidPro 8.0.1 with OIDC
+------------------------
+
+The `v8.0.1` build matrix entry produces an image with built-in OIDC support
+via the [`onaio/ona-oidc`](https://github.com/onaio/ona-oidc) Django app and
+Sentry telemetry via `sentry-sdk`. The image runs as the non-root `rapidpro`
+user (uid 1000) and uses `python:3.10.16-slim-bookworm` as its base.
+
+Build:
+
+    $ docker build \
+        --build-arg RAPIDPRO_VERSION=v8.0.1 \
+        --build-arg RAPIDPRO_REPO=rapidpro/rapidpro \
+        --build-arg OIDC_VERSION=v1.1.1 \
+        -t onaio/rapidpro:v8.0.1-oidc .
+
+Build args:
+
+  - `RAPIDPRO_VERSION` — git tag of `rapidpro/rapidpro` to build (default `master`).
+  - `RAPIDPRO_REPO` — source repo (default `rapidpro/rapidpro`).
+  - `OIDC_VERSION` — git tag of `onaio/ona-oidc` to install (default `v1.1.1`).
+
+Additional environment variables specific to this build:
+
+*ENABLE_OIDC*
+  Set to ``on`` to enable OIDC login (loads the `oidc` app and adds
+  `/oidc/<server>/login/` and `/oidc/<server>/logout/` routes). Defaults to ``off``.
+
+*OPENID_CONNECT_VIEWSET_CONFIG*
+  JSON-encoded config for the OIDC viewset (see `ona-oidc` README). Required when
+  `ENABLE_OIDC=on`.
+
+*OPENID_CONNECT_AUTH_SERVERS*
+  JSON-encoded auth-server config for OIDC. Required when `ENABLE_OIDC=on`.
+
+*OPENID_CONNECT_DEFAULT_AUTH_SERVER*
+  Slug of the default auth server defined in `OPENID_CONNECT_AUTH_SERVERS`.
+  Defaults to ``default``.
+
+*SENTRY_DSN*
+  DSN for Sentry error reporting. Optional; if unset, Sentry is not initialised.
+
+*CSRF_TRUSTED_ORIGINS*
+  Comma-separated list of origins to trust for CSRF (Django 4+). Example:
+  ``https://app.example.org/*,https://api.example.org/*``. Optional.
+
+*NON_ISO6391_LANGUAGES*
+  Comma-separated ISO 639-3 language codes to allow in addition to the built-in
+  ISO 639-1 set (e.g. ``ach,nus,zne``). Optional.
+
+*API_THROTTLE_V2_BROADCASTS*
+  Throttle for v2 broadcast API (in addition to the existing
+  ``API_THROTTLE_V2_*`` family).
