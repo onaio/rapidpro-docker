@@ -5,22 +5,28 @@ on:
     branches:
       - master
   pull_request:
+  workflow_dispatch:
+
+env:
+  REGISTRY_IMAGE: docker.io/onaio/rapidpro
+  REPO: rapidpro/rapidpro
+  OIDC_VERSION: v1.1.1
 
 jobs:
-  build:
+  # PR feedback: amd64 build + smoke test, no registry push.
+  test:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     env:
       python_version: "3.9.x"
       IMAGE: rapidpro:ci
-      REPO: rapidpro/rapidpro
-      OIDC_VERSION: v1.1.1
       GREP_TIMEOUT: 360
     strategy:
       matrix:
         VERSION: [v8.0.1]
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-python@v2
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ env.python_version }}
       - name: Install PostgreSQL and PostGIS
@@ -32,18 +38,22 @@ jobs:
           postgresql user: temba
           postgresql password: temba
           postgresql arguments: "--jit=off"
-      - uses: docker/setup-buildx-action@v1
-      - name: Build Rapidpro Image
-        uses: docker/build-push-action@v2
+      - uses: docker/setup-buildx-action@v4
+      - name: Build Rapidpro Image (amd64, local load)
+        uses: docker/build-push-action@v7
         with:
           push: false
           load: true
           context: .
+          platforms: linux/amd64
           tags: ${{ env.IMAGE }}
           build-args: |
-            RAPIDPRO_VERSION=${{matrix.VERSION}}
-            RAPIDPRO_REPO=${{env.REPO}}
-            OIDC_VERSION=${{env.OIDC_VERSION}}
+            RAPIDPRO_VERSION=${{ matrix.VERSION }}
+            RAPIDPRO_REPO=${{ env.REPO }}
+            OIDC_VERSION=${{ env.OIDC_VERSION }}
+          # Read-only cache hit from the publish path's most recent master build.
+          # No cache-to here — PRs must not pollute the publish-path cache.
+          cache-from: type=gha,scope=linux-amd64
       - name: Test Rapidpro Image
         run: |
           docker run --name rapidpro --env-file docker.envfile --link postgis --publish 8000:8000 --detach "${{ env.IMAGE }}"
@@ -60,3 +70,99 @@ jobs:
         if: always()
         run: |
           docker logs rapidpro
+
+  # Per-arch native build: pushes by digest only, no tag.
+  build:
+    if: github.event_name != 'pull_request'
+    strategy:
+      fail-fast: false
+      matrix:
+        VERSION: [v8.0.1]
+        platforms:
+          - [linux/amd64, ubuntu-latest]
+          - [linux/arm64, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.platforms[1] }}
+    steps:
+      - name: Prepare
+        run: |
+          platform=${{ matrix.platforms[0] }}
+          echo "PLATFORM_PAIR=${platform//\//-}" >> $GITHUB_ENV
+      - uses: actions/checkout@v6
+      - uses: docker/setup-buildx-action@v4
+      - name: Login to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.REGISTRY_IMAGE }}
+          tags: |
+            type=sha,prefix=${{ matrix.VERSION }}-oidc-,format=short
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: ${{ matrix.platforms[0] }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            RAPIDPRO_VERSION=${{ matrix.VERSION }}
+            RAPIDPRO_REPO=${{ env.REPO }}
+            OIDC_VERSION=${{ env.OIDC_VERSION }}
+          cache-from: type=gha,scope=${{ env.PLATFORM_PAIR }}
+          cache-to: type=gha,scope=${{ env.PLATFORM_PAIR }},mode=max
+          provenance: false
+          outputs: |
+            type=image,name=${{ env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
+      - name: Export digest
+        run: |
+          mkdir -p /tmp/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${digest#sha256:}"
+      - name: Upload digest
+        uses: actions/upload-artifact@v7
+        with:
+          name: digests-${{ matrix.VERSION }}-${{ env.PLATFORM_PAIR }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # Stitch per-arch digests into a single multi-arch tag.
+  merge:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    needs: build
+    strategy:
+      matrix:
+        VERSION: [v8.0.1]
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@v8
+        with:
+          path: /tmp/digests
+          pattern: digests-${{ matrix.VERSION }}-*
+          merge-multiple: true
+      - uses: docker/setup-buildx-action@v4
+      - name: Login to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.REGISTRY_IMAGE }}
+          tags: |
+            type=sha,prefix=${{ matrix.VERSION }}-oidc-,format=short
+      - name: Create manifest list and push
+        working-directory: /tmp/digests
+        run: |
+          docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf '${{ env.REGISTRY_IMAGE }}@sha256:%s ' *)
+      - name: Inspect image
+        run: |
+          docker buildx imagetools inspect ${{ env.REGISTRY_IMAGE }}:${{ steps.meta.outputs.version }}
