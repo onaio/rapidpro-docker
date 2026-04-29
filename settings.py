@@ -236,6 +236,15 @@ REST_FRAMEWORK['DEFAULT_THROTTLE_RATES'] = {
     'v2.broadcasts': env('API_THROTTLE_V2_BROADCASTS', '2500/hour'),
 }
 
+# DRF page size — overridable via PAGE_SIZE env var. Default matches
+# upstream rapidpro/rapidpro (250) so unset deployments keep prior behaviour.
+REST_FRAMEWORK['PAGE_SIZE'] = int(env('PAGE_SIZE', 250))
+
+# Trust the X-Forwarded-Host header from the ingress when constructing
+# request.get_host(). Only enable when every ingress in front of the app
+# is trusted to strip/rewrite this header from clients.
+USE_X_FORWARDED_HOST = env('USE_X_FORWARDED_HOST', 'off') == 'on'
+
 MAILROOM_URL = env('MAILROOM_URL', '')
 MAILROOM_AUTH_TOKEN = env('MAILROOM_AUTH_TOKEN', '')
 
