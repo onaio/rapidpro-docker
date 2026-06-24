@@ -22,6 +22,21 @@ from temba.settings_common import *  # noqa
 ROOT_URLCONF = env('ROOT_URLCONF', 'temba.urls')
 
 DEBUG = env('DJANGO_DEBUG', 'off') == 'on'
+SESSION_COOKIE_AGE = int(
+    env('SESSION_COOKIE_AGE', globals().get('SESSION_COOKIE_AGE', 1209600))
+)
+_session_save_every_request = env(
+    'SESSION_SAVE_EVERY_REQUEST',
+    globals().get('SESSION_SAVE_EVERY_REQUEST', False),
+)
+SESSION_SAVE_EVERY_REQUEST = str(
+    _session_save_every_request
+).lower() in (
+    '1',
+    'true',
+    'yes',
+    'on',
+)
 
 SENTRY_DSN = os.environ.get("SENTRY_DSN", "")
 

@@ -304,6 +304,13 @@ Additional environment variables specific to this build:
   Comma-separated list of origins to trust for CSRF (Django 4+). Example:
   ``https://app.example.org/*,https://api.example.org/*``. Optional.
 
+*SESSION_COOKIE_AGE*
+  Django session cookie age in seconds. Optional; defaults to upstream RapidPro.
+
+*SESSION_SAVE_EVERY_REQUEST*
+  Set to ``true``/``on`` to refresh the session expiry on every request.
+  Optional; defaults to Django's standard behavior.
+
 *NON_ISO6391_LANGUAGES*
   Comma-separated ISO 639-3 language codes to allow in addition to the built-in
   ISO 639-1 set (e.g. ``ach,nus,zne``). Optional.
