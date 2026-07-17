@@ -15,7 +15,7 @@ fi
 
 # Compress files if enabled.
 if [ "${MANAGEPY_COMPRESS:-off}" = "on" ]; then
-    /venv/bin/python manage.py compress --extension=".haml" --force -v0
+    /venv/bin/python manage.py compress --extension=".html" --settings=temba.settings_compress --force -v0
 fi
 
 # Initialize the database if enabled.
