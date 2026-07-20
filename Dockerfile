@@ -1,4 +1,4 @@
-FROM python:3.10.16-slim-bookworm as builder
+FROM python:3.10.16-slim-bookworm AS builder
 
 ENV PIP_RETRIES=120 \
     PIP_TIMEOUT=400 \
@@ -33,7 +33,8 @@ RUN /venv/bin/pip install --trusted-host pypi.python.org --trusted-host files.py
 "uwsgi==2.0.22" \
 "whitenoise==5.3.0" \
 "flower==1.2.0" \
-"sentry-sdk==2.5.1"
+"sentry-sdk==2.5.1" \
+"regex==2023.10.3"
 
 RUN poetry install --no-interaction --no-ansi --only main
 
@@ -41,6 +42,21 @@ RUN poetry install --no-interaction --no-ansi --only main
 ARG OIDC_VERSION=v1.1.1
 ENV OIDC_VERSION=${OIDC_VERSION:-v1.1.1}
 RUN /venv/bin/pip install -e "git+https://github.com/onaio/ona-oidc.git@${OIDC_VERSION}#egg=ona-oidc"
+
+# ona-oidc v1.1.1 still calls the old RapidPro user.get_settings() helper.
+# RapidPro v9 stores this as temba.orgs.models.UserSettings instead.
+RUN sed -i 's/user_settings = user.get_settings()/from temba.orgs.models import UserSettings\n        user_settings, _ = UserSettings.objects.get_or_create(user=user)/' \
+    /venv/src/ona-oidc/oidc/viewsets.py
+
+FROM node:20-bookworm-slim AS frontend
+
+WORKDIR /rapidpro
+
+COPY --from=builder /rapidpro /rapidpro
+
+RUN corepack enable && \
+    yarn install --frozen-lockfile && \
+    npm install -g less
 
 FROM python:3.10.16-slim-bookworm
 
@@ -59,7 +75,7 @@ ENV VIRTUAL_ENV="/venv"
 # `magic` is needed since rapidpro v3.0.64
 # `pcre` is needed for uwsgi
 # `geos`, `gdal`, and `proj` are needed for `manage.py download_geojson` and `manage.py import_geojson`
-# `npm` for static file generation
+# `node` and `lessc` are copied from the frontend stage for static compression
 RUN apt-get update -q && \
     apt-get install -y --no-install-recommends \
         postgresql-client \
@@ -67,14 +83,16 @@ RUN apt-get update -q && \
         libpcre3 \
         libgeos-dev \
         libgdal-dev \
-        libproj-dev \
-        npm && \
+        libproj-dev && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /rapidpro
 
-RUN npm install -g less && npm install
+COPY --from=frontend /rapidpro/node_modules /rapidpro/node_modules
+COPY --from=frontend /usr/local/bin/node /usr/local/bin/node
+COPY --from=frontend /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -sf /usr/local/lib/node_modules/less/bin/lessc /usr/local/bin/lessc
 
 ENV UWSGI_VIRTUALENV=/venv UWSGI_WSGI_FILE=temba/wsgi.py UWSGI_HTTP=:8000 UWSGI_MASTER=1 UWSGI_WORKERS=8 UWSGI_HARAKIRI=20
 # Enable HTTP 1.1 Keep Alive options for uWSGI (http-auto-chunked needed when ConditionalGetMiddleware not installed)
@@ -82,6 +100,13 @@ ENV UWSGI_VIRTUALENV=/venv UWSGI_WSGI_FILE=temba/wsgi.py UWSGI_HTTP=:8000 UWSGI_
 ENV STARTUP_CMD="/venv/bin/uwsgi --http-auto-chunked --http-keepalive"
 
 COPY settings.py /rapidpro/temba/
+COPY patches/omnibox.py /rapidpro/temba/contacts/search/omnibox.py
+COPY patches/apply-oidc-logout-menu.py /tmp/apply-oidc-logout-menu.py
+RUN /venv/bin/python /tmp/apply-oidc-logout-menu.py && rm /tmp/apply-oidc-logout-menu.py
+COPY patches/apply-oidc-logout-session-hardening.py /tmp/apply-oidc-logout-session-hardening.py
+RUN /venv/bin/python /tmp/apply-oidc-logout-session-hardening.py && rm /tmp/apply-oidc-logout-session-hardening.py
+COPY patches/apply-oidc-rp-initiated-logout.py /tmp/apply-oidc-rp-initiated-logout.py
+RUN /venv/bin/python /tmp/apply-oidc-rp-initiated-logout.py && rm /tmp/apply-oidc-rp-initiated-logout.py
 # 500.html needed to keep the missing template from causing an exception during error handling
 COPY stack/500.html /rapidpro/templates/
 COPY stack/init_db.sql /rapidpro/
