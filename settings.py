@@ -14,7 +14,6 @@ from sentry_sdk.integrations.django import DjangoIntegration
 from sentry_sdk.integrations.logging import LoggingIntegration, ignore_logger
 from django.core.signals import got_request_exception
 from sentry_sdk import capture_exception
-from datetime import datetime
 from django.utils.translation import gettext_lazy as _
 
 from temba.settings_common import *  # noqa
@@ -118,31 +117,41 @@ AWS_MEDIA = env('AWS_MEDIA', False)
 AWS_S3_ENDPOINT_URL = env('AWS_S3_ENDPOINT_URL', None)
 
 if AWS_STORAGE_BUCKET_NAME:
-    # Tell django-storages that when coming up with the URL for an item in S3 storage, keep
-    # it simple - just use this domain plus the path. (If this isn't set, things get complicated).
-    # This controls how the `static` template tag from `staticfiles` gets expanded, if you're using it.
-    # We also use it in the next setting.
     if CDN_DOMAIN_NAME:
         AWS_S3_DOMAIN = CDN_DOMAIN_NAME
     else:
         AWS_S3_DOMAIN = '%s.s3.amazonaws.com' % AWS_STORAGE_BUCKET_NAME
 
+    _s3_storage_options = {
+        'bucket_name': AWS_STORAGE_BUCKET_NAME,
+        'region_name': AWS_S3_REGION_NAME or None,
+        'endpoint_url': AWS_S3_ENDPOINT_URL,
+        'default_acl': AWS_DEFAULT_ACL or None,
+    }
+    _s3_storage_options = {k: v for k, v in _s3_storage_options.items() if v is not None}
+
     if AWS_STATIC:
-        # This is used by the `static` template tag from `static`, if you're using that. Or if anything else
-        # refers directly to STATIC_URL. So it's safest to always set it.
         STATIC_URL = "https://%s/" % AWS_S3_DOMAIN
-
-        # Tell the staticfiles app to use S3Boto storage when writing the collected static files (when
-        # you run `collectstatic`).
-        STATICFILES_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
-
-        COMPRESS_STORAGE = STATICFILES_STORAGE
+        STORAGES['staticfiles'] = {
+            'BACKEND': 'storages.backends.s3boto3.S3Boto3Storage',
+            'OPTIONS': _s3_storage_options,
+        }
 
     if AWS_MEDIA:
-        MEDIAFILES_LOCATION = 'media'
-        MEDIA_URL = "https://%s/%s/" % (AWS_S3_DOMAIN, MEDIAFILES_LOCATION)
+        MEDIA_URL = "https://%s/" % AWS_S3_DOMAIN
+        STORAGES['default'] = {
+            'BACKEND': 'storages.backends.s3boto3.S3Boto3Storage',
+            'OPTIONS': _s3_storage_options,
+        }
+        STORAGES['public'] = {
+            'BACKEND': 'storages.backends.s3boto3.S3Boto3Storage',
+            'OPTIONS': _s3_storage_options,
+        }
 
-        DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
+    STORAGES['archives'] = {
+        'BACKEND': 'storages.backends.s3boto3.S3Boto3Storage',
+        'OPTIONS': _s3_storage_options,
+    }
 
 if not AWS_STATIC:
     STATIC_URL = '/sitestatic/'
@@ -177,70 +186,38 @@ EMAIL_USE_TLS = env('EMAIL_USE_TLS', 'on') == 'on'
 SECURE_PROXY_SSL_HEADER = (
     env('SECURE_PROXY_SSL_HEADER', 'HTTP_X_FORWARDED_PROTO'), 'https')
 IS_PROD = env('IS_PROD', 'off') == 'on'
+DEFAULT_BRAND = env('DEFAULT_BRAND', HOSTNAME)
 
-BRANDING = {
-    'rapidpro': {
-        'slug': env('BRANDING_SLUG', 'rapidpro'),
-        'name': env('BRANDING_NAME', 'RapidPro'),
-        'org': env('BRANDING_ORG', 'RapidPro'),
-        'colors': dict([rule.split('=') for rule in env('BRANDING_COLORS', 'primary=#0c6596').split(';')]),
-        'styles': ['brands/rapidpro/font/style.css'],
-        "default_plan": env('BRANDING_DEFAULT_PLAN', 'topups'),
-        'welcome_topup': 1000,
-        'email': env('BRANDING_EMAIL', 'join@rapidpro.io'),
-        'support_email': env('BRANDING_SUPPORT_EMAIL', 'join@rapidpro.io'),
-        'link': env('BRANDING_LINK', 'https://app.rapidpro.io'),
-        'api_link': env('BRANDING_API_LINK', 'https://api.rapidpro.io'),
-        'docs_link': env('BRANDING_DOCS_LINK', 'http://docs.rapidpro.io'),
-        'domain': HOSTNAME,
-        'ticket_domain': env('BRANDING_TICKET_DOMAIN', HOSTNAME),
-        'favico': env('BRANDING_FAVICO', 'brands/rapidpro/rapidpro.ico'),
-        'splash': env('BRANDING_SPLASH', '/brands/rapidpro/splash.jpg'),
-        'logo': env('BRANDING_LOGO', '/brands/rapidpro/logo.png'),
-        'allow_signups': env('BRANDING_ALLOW_SIGNUPS', 'on') == 'on',
-        'flow_types': env('BRANDING_FLOW_TYPES', 'M,V,B,S').split(','),
-        'location_support': env('BRANDING_LOCATION_SUPPORT', 'on') == 'on',
-        'tiers': dict(import_flows=0, multi_user=0, multi_org=0),
-        'bundles': [],
-        'welcome_packs': [dict(size=5000, name="Demo Account"), dict(size=100000, name="UNICEF Account")],
-        'title': _("Visually build nationally scalable mobile applications"),
-        'description': _("Visually build nationally scalable mobile applications from anywhere in the world."),
-        'credits': _("Copyright &copy; 2012-%s UNICEF, Nyaruka, and individual contributors. All Rights Reserved." % (
-            datetime.now().strftime('%Y')
-        )),
-        'support_widget': env('BRANDING_SUPPORT_WIDGET', 'off') == 'on',
-    }
+BRAND = {
+    'name': env('BRANDING_NAME', 'RapidPro'),
+    'description': _("Visually build nationally scalable mobile applications from anywhere in the world."),
+    'hosts': ALLOWED_HOSTS,
+    'domain': HOSTNAME,
+    'emails': {
+        'notifications': env('BRANDING_EMAIL', DEFAULT_FROM_EMAIL),
+        'support': env('BRANDING_SUPPORT_EMAIL', DEFAULT_FROM_EMAIL),
+    },
+    'logos': {
+        'primary': env('BRANDING_LOGO', 'images/logo-dark.svg').lstrip('/'),
+        'favico': env('BRANDING_FAVICO', 'brands/rapidpro/rapidpro.ico').lstrip('/'),
+    },
+    'landing': {
+        'hero': env('BRANDING_SPLASH', 'brands/rapidpro/splash.jpg').lstrip('/'),
+    },
+    'docs_link': env('BRANDING_DOCS_LINK', 'http://docs.rapidpro.io'),
+    'ticket_domain': env('BRANDING_TICKET_DOMAIN', HOSTNAME),
+    'features': [],
 }
-# Extract and transform the first branding entry to the new BRANDS format
-BRANDS = [
-    {
-        "slug": env('BRANDING_SLUG',"rapidpro"),
-        "name": env('BRANDING_NAME', 'RapidPro'),
-        "hosts": [HOSTNAME],
-        "org": env('BRANDING_ORG', 'RapidPro'),
-        "domain": HOSTNAME,
-        "colors": dict([rule.split('=') for rule in env('BRANDING_COLORS', 'primary=#0c6596').split(';')]),
-        "styles": ["brands/rapidpro/font/style.css"],
-        "email": env('BRANDING_EMAIL', 'join@rapidpro.io'),
-        "support_email": env('BRANDING_SUPPORT_EMAIL', 'join@rapidpro.io'),
-        "link": env('BRANDING_LINK', 'https://app.rapidpro.io'),
-        "docs_link": env('BRANDING_DOCS_LINK', 'http://docs.rapidpro.io'),
-        "ticket_domain": env('BRANDING_TICKET_DOMAIN', HOSTNAME),
-        "favico": env('BRANDING_FAVICO', 'brands/rapidpro/rapidpro.ico'),
-        "splash": env('BRANDING_SPLASH', '/brands/rapidpro/splash.jpg'),
-        "logo": env('BRANDING_LOGO', '/brands/rapidpro/logo.png'),
-        "allow_signups": env('BRANDING_ALLOW_SIGNUPS', 'on') == 'on',
-        "title": _("Visually build nationally scalable mobile applications"),
-    }
-]
+if env('BRANDING_ALLOW_SIGNUPS', 'on') == 'on':
+    BRAND['features'].append('signups')
 
-
-# build up our offline compression context based on available brands
-COMPRESS_OFFLINE_CONTEXT = []
-for brand in BRANDING.values():
-    context = dict(STATIC_URL=STATIC_URL, base_template='frame.html', debug=False, testing=False)
-    context['brand'] = dict(slug=brand['slug'], styles=brand['styles'])
-    COMPRESS_OFFLINE_CONTEXT.append(context)
+COMPRESS_OFFLINE_CONTEXT = dict(
+    STATIC_URL=STATIC_URL,
+    base_template='frame.html',
+    brand=BRAND,
+    debug=False,
+    testing=False,
+)
 
 REST_FRAMEWORK['DEFAULT_THROTTLE_RATES'] = {
     'v2': env('API_THROTTLE_V2', '2500/hour'),
@@ -291,6 +268,11 @@ if ENABLE_OIDC == 'on':
     OPENID_CONNECT_DEFAULT_AUTH_SERVER = env('OPENID_CONNECT_DEFAULT_AUTH_SERVER', 'default')
     LOGIN_URL = "/oidc/" + OPENID_CONNECT_DEFAULT_AUTH_SERVER + "/login/"
     LOGOUT_URL = "/oidc/" + OPENID_CONNECT_DEFAULT_AUTH_SERVER + "/logout/"
+    # CIAM/WSO2 only terminates the SSO session without a consent prompt when
+    # logout sends id_token_hint; this URI must be registered as a post-logout
+    # redirect URI on the CIAM service provider for the RapidPro client.
+    OPENID_CONNECT_POST_LOGOUT_REDIRECT_URI = env(
+        'OPENID_CONNECT_POST_LOGOUT_REDIRECT_URI', 'https://%s/users/login' % HOSTNAME)
 
 # CSRF trusted origins — comma-separated list provided by the deployment.
 # Example: CSRF_TRUSTED_ORIGINS="https://app.example.org/*,https://api.example.org/*"
