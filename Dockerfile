@@ -39,11 +39,11 @@ RUN /venv/bin/pip install --trusted-host pypi.python.org --trusted-host files.py
 RUN poetry install --no-interaction --no-ansi --only main
 
 # Install the Ona OIDC pip package.
-ARG OIDC_VERSION=v1.1.1
-ENV OIDC_VERSION=${OIDC_VERSION:-v1.1.1}
-RUN /venv/bin/pip install -e "git+https://github.com/onaio/ona-oidc.git@${OIDC_VERSION}#egg=ona-oidc"
+ARG OIDC_VERSION=v2.6.0
+ENV OIDC_VERSION=${OIDC_VERSION:-v2.6.0}
+RUN /venv/bin/pip install "Django>=4.2,<5" -e "git+https://github.com/onaio/ona-oidc.git@${OIDC_VERSION}#egg=ona-oidc"
 
-# ona-oidc v1.1.1 still calls the old RapidPro user.get_settings() helper.
+# ona-oidc v2.6.0 still calls the old RapidPro user.get_settings() helper.
 # RapidPro v9 stores this as temba.orgs.models.UserSettings instead.
 RUN sed -i 's/user_settings = user.get_settings()/from temba.orgs.models import UserSettings\n        user_settings, _ = UserSettings.objects.get_or_create(user=user)/' \
     /venv/src/ona-oidc/oidc/viewsets.py

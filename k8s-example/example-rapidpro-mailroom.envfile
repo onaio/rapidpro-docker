@@ -11,6 +11,6 @@ MAILROOM_AWS_SECRET_ACCESS_KEY=MAILROOM_AWS_SECRET_ACCESS_KEY
 MAILROOM_S3_MEDIA_BUCKET=example-rapidpro
 MAILROOM_S3_REGION=eu-west-1
 MAILROOM_SENTRY_DSN=https://sentry.io/123
-MAILROOM_SMTP_SERVER=smtp://user@domain.org.za:password@localhost:587/?from=hello%domain.org.za
+MAILROOM_SMTP_SERVER=smtp://user@example.org:password@localhost:587/?from=hello%example.org
 
 MAILROOM_ELASTIC=http://localhost:9200

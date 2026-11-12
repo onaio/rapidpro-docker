@@ -263,14 +263,16 @@ if ENABLE_OIDC == 'on':
     # auto-parses dict-shaped env-var values via ast.literal_eval, so
     # deployment values can use Python literals (True/False/None,
     # trailing commas) in addition to strict JSON.
+    # Preserve RapidPro admin behavior; OIDC 2.6 enables its import admin by default.
+    OPENID_IMPORT_USER = {'ENABLED': False}
     OPENID_CONNECT_VIEWSET_CONFIG = env('OPENID_CONNECT_VIEWSET_CONFIG', {})
     OPENID_CONNECT_AUTH_SERVERS = env('OPENID_CONNECT_AUTH_SERVERS', {})
     OPENID_CONNECT_DEFAULT_AUTH_SERVER = env('OPENID_CONNECT_DEFAULT_AUTH_SERVER', 'default')
     LOGIN_URL = "/oidc/" + OPENID_CONNECT_DEFAULT_AUTH_SERVER + "/login/"
     LOGOUT_URL = "/oidc/" + OPENID_CONNECT_DEFAULT_AUTH_SERVER + "/logout/"
-    # CIAM/WSO2 only terminates the SSO session without a consent prompt when
-    # logout sends id_token_hint; this URI must be registered as a post-logout
-    # redirect URI on the CIAM service provider for the RapidPro client.
+    # Send id_token_hint during RP-initiated logout to identify the session.
+    # Register this post-logout redirect URI with the OIDC provider for
+    # the RapidPro client.
     OPENID_CONNECT_POST_LOGOUT_REDIRECT_URI = env(
         'OPENID_CONNECT_POST_LOGOUT_REDIRECT_URI', 'https://%s/users/login' % HOSTNAME)
 

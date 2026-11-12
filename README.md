@@ -258,10 +258,10 @@ v6.4 to v7.0:
   - Clear the sitestatic folder/S3 bucket and regenerate static files (otherwise icons don't work)
   - Ensure you're calling celery in the new CLI format, ie. `celery --app=temba beat`, not `celery beat --app=temba`
 
-RapidPro 8.0.1 with OIDC
+RapidPro 9.0.0 with OIDC
 ------------------------
 
-The `v8.0.1` build matrix entry produces an image with built-in OIDC support
+The `v9.0.0` build matrix entry produces an image with built-in OIDC support
 via the [`onaio/ona-oidc`](https://github.com/onaio/ona-oidc) Django app and
 Sentry telemetry via `sentry-sdk`. The image runs as the non-root `rapidpro`
 user (uid 1000) and uses `python:3.10.16-slim-bookworm` as its base.
@@ -269,16 +269,16 @@ user (uid 1000) and uses `python:3.10.16-slim-bookworm` as its base.
 Build:
 
     $ docker build \
-        --build-arg RAPIDPRO_VERSION=v8.0.1 \
+        --build-arg RAPIDPRO_VERSION=v9.0.0 \
         --build-arg RAPIDPRO_REPO=rapidpro/rapidpro \
-        --build-arg OIDC_VERSION=v1.1.1 \
-        -t onaio/rapidpro:v8.0.1-oidc .
+        --build-arg OIDC_VERSION=v2.6.0 \
+        -t onaio/rapidpro:v9.0.0-oidc .
 
 Build args:
 
   - `RAPIDPRO_VERSION` — git tag of `rapidpro/rapidpro` to build (default `master`).
   - `RAPIDPRO_REPO` — source repo (default `rapidpro/rapidpro`).
-  - `OIDC_VERSION` — git tag of `onaio/ona-oidc` to install (default `v1.1.1`).
+  - `OIDC_VERSION` — git tag of `onaio/ona-oidc` to install (default `v2.6.0`).
 
 Additional environment variables specific to this build:
 
@@ -318,3 +318,25 @@ Additional environment variables specific to this build:
 *API_THROTTLE_V2_BROADCASTS*
   Throttle for v2 broadcast API (in addition to the existing
   ``API_THROTTLE_V2_*`` family).
+
+OIDC 2.6.0 compatibility
+------------------------
+
+This build keeps Python 3.10 and Django 4.2. OIDC 2.10.0 requires newer
+runtimes and is not supported by this image. The optional OIDC admin user
+import feature is disabled to preserve RapidPro admin behavior. Existing
+logout patches retain POST logout, session clearing, and ID token hints.
+
+Set `"REQUEST_MODE": "form_post"` within each OIDC provider entry in
+`OPENID_CONNECT_AUTH_SERVERS` to send token exchange parameters in the POST
+body. Keep `"RESPONSE_TYPE": "code"` and `"RESPONSE_MODE": "form_post"`.
+A standalone `REQUEST_MODE` environment variable has no effect.
+
+This upgrade covers existing-user login and logout. Automatic user and
+organization provisioning still needs separate RapidPro v9 compatibility
+work. Validate a complete OIDC login and logout in staging before rollout.
+
+Run the focused compatibility tests against the built image:
+
+    docker run --rm --entrypoint /venv/bin/python -v "$PWD/tests:/tests:ro" rapidpro:ci /tests/test_oidc.py
+    docker run --rm --entrypoint /venv/bin/pip rapidpro:ci check

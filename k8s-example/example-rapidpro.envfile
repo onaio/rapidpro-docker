@@ -16,11 +16,11 @@ AWS_DEFAULT_ACL=''
 
 EMAIL_PORT=587
 EMAIL_HOST=localhost
-EMAIL_HOST_USER=user@domain.org.za
+EMAIL_HOST_USER=user@example.org
 EMAIL_HOST_PASSWORD=password
 EMAIL_USE_TLS=on
 
-DEFAULT_FROM_EMAIL=hello%domain.org.za
+DEFAULT_FROM_EMAIL=hello%example.org
 
 BRANDING_LINK=https://rapidpro.example.org
 BRANDING_ALLOW_SIGNUPS=off

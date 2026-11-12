@@ -1,8 +1,8 @@
 """Make ona-oidc logout a real OIDC RP-initiated logout.
 
-ona-oidc v1.1.1 redirects to the bare end-session endpoint. Without
-id_token_hint, CIAM (WSO2) asks the browser for logout consent and the SSO
-session survives, so returning to RapidPro silently re-authenticates.
+ona-oidc v2.6.0 redirects to the bare end-session endpoint. Some OIDC
+providers require id_token_hint to identify the session and complete
+logout without prompting.
 Keep the raw ID token in the Django session at login and send it as
 id_token_hint together with post_logout_redirect_uri at logout.
 """
@@ -11,7 +11,7 @@ from pathlib import Path
 
 def patch(path: Path, old: str, new: str) -> None:
     source = path.read_text()
-    if old not in source:
+    if source.count(old) != 1:
         raise SystemExit(f"Patch anchor not found in {path}:\n{old}")
     path.write_text(source.replace(old, new, 1))
 
@@ -20,13 +20,9 @@ client_path = Path("/venv/src/ona-oidc/oidc/client.py")
 
 patch(
     client_path,
-    """import json
-import secrets
-from typing import Optional
+    """from typing import Callable, Optional
 """,
-    """import json
-import secrets
-from typing import Optional
+    """from typing import Callable, Optional
 from urllib.parse import urlencode
 """,
 )
@@ -58,12 +54,18 @@ patch(
     viewsets_path,
     """                else:
                     if user:
+                        user.last_login = timezone.now()
+                        user.save(update_fields=["last_login"])
+                        self._clear_login_states(server_response)
                         return self.generate_successful_response(
                             request, user, redirect_after=redirect_after
                         )
 """,
     """                else:
                     if user:
+                        user.last_login = timezone.now()
+                        user.save(update_fields=["last_login"])
+                        self._clear_login_states(server_response)
                         response = self.generate_successful_response(
                             request, user, redirect_after=redirect_after
                         )

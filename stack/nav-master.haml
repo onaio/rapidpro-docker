@@ -236,7 +236,7 @@
               .title
                 -trans "end"
           -else
-            %a(href="{% url 'oidc:openid_connect_logout' auth_server='wfp' %}")
+            %a(href="{% url 'oidc:openid_connect_logout' auth_server='default' %}")
               .circle
                 .icon-exit
               .title.whitespace-nowrap
@@ -244,7 +244,7 @@
   -else
     -block temba-login
 
-    %a{href:"{% url 'oidc:openid_connect_login' auth_server='wfp' %}"}
+    %a{href:"{% url 'oidc:openid_connect_login' auth_server='default' %}"}
       .circle
         .icon-user
       .title
