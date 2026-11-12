@@ -3,7 +3,7 @@ name: Docker Image Tests
 on:
   push:
     branches:
-      - master
+      - main
   pull_request:
   workflow_dispatch:
 
@@ -51,7 +51,7 @@ jobs:
             RAPIDPRO_VERSION=${{ matrix.VERSION }}
             RAPIDPRO_REPO=${{ env.REPO }}
             OIDC_VERSION=${{ env.OIDC_VERSION }}
-          # Read-only cache hit from the publish path's most recent master build.
+          # Read-only cache hit from the publish path's most recent main build.
           # No cache-to here — PRs must not pollute the publish-path cache.
           cache-from: type=gha,scope=linux-amd64
       - name: Check OIDC compatibility
